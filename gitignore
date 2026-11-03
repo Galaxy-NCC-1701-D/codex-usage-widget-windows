@@ -1,0 +1,64 @@
+# Build output / 编译与安装包产物
+/dist/
+/build/
+/out/
+/build-cache/
+/release-*/
+*.o
+*.obj
+*.res
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.idb
+*.pch
+*.tlog
+*.exp
+*.lib
+
+# IDE and local settings / 编辑器与本机配置
+.vs/
+.vscode/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+CMakeUserPresets.json
+.codex/
+
+# Python cache and virtual environments / Python 缓存与虚拟环境
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Credentials / 凭据（不能代替人工检查）
+.env
+.env.*
+!.env.example
+!.env.sample
+auth.json
+credentials.json
+secrets.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local runtime data / 本地运行数据
+/UsageWidget/
+/chat-workspace/
+/history/
+/attachments/
+/outputs/
+*.log
+*.dmp
+
+# Temporary files / 临时文件
+*.tmp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
