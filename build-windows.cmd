@@ -10,7 +10,7 @@ if errorlevel 1 (
 cd src
 rc /nologo app.rc
 if errorlevel 1 exit /b 1
-cl /nologo /std:c++17 /utf-8 /EHsc /O2 /MT /DUNICODE /D_UNICODE main.cpp app.res /Fe:..\dist\UsageWidget.exe /link /SUBSYSTEM:WINDOWS gdiplus.lib dwmapi.lib comctl32.lib shell32.lib user32.lib gdi32.lib advapi32.lib winmm.lib imm32.lib ole32.lib uuid.lib comdlg32.lib winhttp.lib
+cl /nologo /std:c++17 /utf-8 /EHsc /O2 /MT /DUNICODE /D_UNICODE main.cpp app.res /Fe:..\dist\UsageWidget.exe /link /SUBSYSTEM:WINDOWS gdiplus.lib dwmapi.lib comctl32.lib shell32.lib user32.lib gdi32.lib advapi32.lib winmm.lib imm32.lib ole32.lib uuid.lib comdlg32.lib winhttp.lib bcrypt.lib
 if errorlevel 1 exit /b 1
 cd ..
 where makensis >nul 2>nul

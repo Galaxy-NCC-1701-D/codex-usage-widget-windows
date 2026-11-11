@@ -3,8 +3,15 @@ Unicode True
 !include "x64.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+!define WIDGET_VERSION "1.7.2"
 Name "Usage Widget"
-OutFile "dist/UsageWidget-Setup-1.7.1-x64.exe"
+OutFile "dist/UsageWidget-Setup-${WIDGET_VERSION}-x64.exe"
+VIProductVersion "${WIDGET_VERSION}.0"
+VIAddVersionKey "ProductName" "Usage Widget"
+VIAddVersionKey "FileDescription" "Usage Widget Setup"
+VIAddVersionKey "FileVersion" "${WIDGET_VERSION}"
+VIAddVersionKey "ProductVersion" "${WIDGET_VERSION}"
+VIAddVersionKey "LegalCopyright" "Usage Widget contributors"
 InstallDir "$LOCALAPPDATA\Programs\UsageWidget"
 InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "InstallLocation"
 RequestExecutionLevel user
@@ -95,7 +102,7 @@ Section "Usage Widget" SEC_MAIN
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "UsageWidget" '$\"$INSTDIR\UsageWidget.exe$\" --autostart'
  ${EndIf}
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "DisplayName" "Usage Widget"
- WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "DisplayVersion" "1.7.1"
+ WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "DisplayVersion" "${WIDGET_VERSION}"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "InstallLocation" "$INSTDIR"
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "UninstallString" '$\"$INSTDIR\Uninstall.exe$\"'
  WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\UsageWidget" "QuietUninstallString" '$\"$INSTDIR\Uninstall.exe$\" /S'

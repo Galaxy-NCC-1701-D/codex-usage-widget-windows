@@ -25,7 +25,7 @@ void clipboardText(const std::wstring&s){if(!OpenClipboard(mainWindow))return;HG
 void insertChat(const std::wstring&value){std::wstring clean;for(wchar_t c:value)if(c>=32||c=='\n'||c=='\t')clean+=c;if(chatSelectAll){chatInput.clear();chatCaret=0;chatSelectAll=false;}if(chatInput.size()+clean.size()>8000){chatStatus=L"Message limit: 8,000 characters";return;}chatInput.insert(chatCaret,clean);chatCaret+=clean.size();InvalidateRect(mainWindow,nullptr,FALSE);}
 size_t priorChat(size_t p){if(!p)return 0;p--;if(p&&chatInput[p]>=0xdc00&&chatInput[p]<=0xdfff&&chatInput[p-1]>=0xd800&&chatInput[p-1]<=0xdbff)p--;return p;}
 size_t nextChat(size_t p){if(p>=chatInput.size())return p;if(chatInput[p]>=0xd800&&chatInput[p]<=0xdbff&&p+1<chatInput.size())return p+2;return p+1;}
-void sendChat(){if(chatBusy||chatComposing||!pendingDeleteId.empty()||(chatInput.find_first_not_of(L" \t\r\n")==std::wstring::npos&&pendingAttachments.empty()))return;auto prompt=chatInput+attachmentText;if(prompt.empty())prompt=L"Please describe the attached image.";if(narrow(prompt).size()>256*1024){chatError=L"Attached text is too large. Split the files first.";return;}if(auto*m=currentModel())if(!m->supportsImages&&std::any_of(pendingAttachments.begin(),pendingAttachments.end(),[](auto&a){return a.image;})){chatError=L"This model does not accept images. Choose an image-capable model.";return;}chatMessages.push_back({true,chatInput,pendingAttachments});chatMessages.push_back({false,L"",{}});chatBusy=true;chatError.clear();chatAutoScroll=true;auto*c=currentSaved();std::vector<std::string>images;for(auto&a:pendingAttachments)if(a.image)images.push_back(a.path);queueSend(narrow(prompt),selectedModel,selectedEffort,currentChatId,c?c->thread:"",images);pendingAttachments.clear();pendingFileText.clear();attachmentText.clear();chatInput.clear();chatCaret=0;chatSelectAll=false;historyDirty=true;saveCurrent();InvalidateRect(mainWindow,nullptr,FALSE);}
+void sendChat(){if(updateInstalling())return;if(chatBusy||chatComposing||!pendingDeleteId.empty()||(chatInput.find_first_not_of(L" \t\r\n")==std::wstring::npos&&pendingAttachments.empty()))return;auto prompt=chatInput+attachmentText;if(prompt.empty())prompt=L"Please describe the attached image.";if(narrow(prompt).size()>256*1024){chatError=L"Attached text is too large. Split the files first.";return;}if(auto*m=currentModel())if(!m->supportsImages&&std::any_of(pendingAttachments.begin(),pendingAttachments.end(),[](auto&a){return a.image;})){chatError=L"This model does not accept images. Choose an image-capable model.";return;}chatMessages.push_back({true,chatInput,pendingAttachments});chatMessages.push_back({false,L"",{}});chatBusy=true;chatError.clear();chatAutoScroll=true;auto*c=currentSaved();std::vector<std::string>images;for(auto&a:pendingAttachments)if(a.image)images.push_back(a.path);queueSend(narrow(prompt),selectedModel,selectedEffort,currentChatId,c?c->thread:"",images);pendingAttachments.clear();pendingFileText.clear();attachmentText.clear();chatInput.clear();chatCaret=0;chatSelectAll=false;historyDirty=true;saveCurrent();InvalidateRect(mainWindow,nullptr,FALSE);}
 
 void receiveChat(const uw::chat::Event&e){
  if(e.kind==uw::chat::Event::Runtime){runtimeDiagnostics=wide(e.text);return;}
@@ -93,8 +93,61 @@ void clearDraftAttachments(){for(auto&a:pendingAttachments){imageCache.erase(wid
 void newConversation(){if(chatBusy||!pendingDeleteId.empty())return;saveCurrent();clearDraftAttachments();clearRenderedImages();currentChatId=newId();chatMessages.clear();chatInput.clear();chatCaret=0;chatError.clear();chatScroll=0;chatAutoScroll=true;queueBind(currentChatId,"");InvalidateRect(mainWindow,nullptr,FALSE);}
 void loadConversation(const std::string&id){if(chatBusy||!pendingDeleteId.empty()){MessageBoxW(mainWindow,L"Stop the current response before opening another conversation.",L"History",MB_OK);return;}saveCurrent();auto i=std::find_if(savedChats.begin(),savedChats.end(),[&](auto&c){return c.id==id;});if(i==savedChats.end())return;clearDraftAttachments();auto record=*i;clearRenderedImages();if(httpsMode.load()!=record.https){httpsMode=record.https;WritePrivateProfileStringW(L"Connection",L"HttpsMode",record.https?L"1":L"0",configPath.c_str());wantRestart=true;}currentChatId=id;chatMessages.clear();for(auto&m:record.messages)chatMessages.push_back({m.user,wide(m.text),m.attachments});if(record.interrupted){if(chatMessages.empty()||chatMessages.back().user)chatMessages.push_back({false,L"",{}});chatMessages.back().text+=L"\n[Interrupted after restart. Your message was not resent.]";}selectedModel=record.model;selectedEffort=record.effort;modelPrefsLoaded=true;saveModelPrefs();chatError.clear();chatInput.clear();chatCaret=0;chatAutoScroll=true;queueBind(id,record.thread);historyDirty=true;saveCurrent();openChat();}
 void restoreLastConversation(){wchar_t last[128];GetPrivateProfileStringW(L"Chat",L"LastConversation",L"",last,128,configPath.c_str());std::string id=narrow(last);currentChatId=newId();if(id.empty()&&!savedChats.empty())id=savedChats.front().id;if(!id.empty())loadConversation(id);wchar_t key[128];GetPrivateProfileStringW(L"Usage",L"PendingReset",L"",key,128,configPath.c_str());pendingResetKey=narrow(key);}
-void deleteConversation(const std::string&id){if(!pendingDeleteId.empty())return;auto i=std::find_if(savedChats.begin(),savedChats.end(),[&](auto&c){return c.id==id;});if(id==currentChatId){saveCurrent();i=std::find_if(savedChats.begin(),savedChats.end(),[&](auto&c){return c.id==id;});}if(i==savedChats.end())return;if(MessageBoxW(mainWindow,L"Permanently delete this conversation from Codex and remove its widget history and attachment copies?",L"Delete chat",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES)return;pendingDeleteId=id;if(chatBusy){if(id!=currentChatId){pendingDeleteId.clear();MessageBoxW(mainWindow,L"Stop the active response first.",L"History",MB_OK);return;}deleteAfterStop=true;queueChat(1);}else queueChat(6,i->thread);}
-void resetUsage(){if(resetBusy)return;if(pendingResetKey.empty()){if(!resetCredits.known||resetCredits.count<=0||time(nullptr)-creditsUpdated>150){resetMessage=L"Refresh quota to check available resets.";wantRefresh=true;return;}if(MessageBoxW(mainWindow,L"Use one available reset credit? The server determines which quota windows are eligible.",L"Reset usage",MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2)!=IDYES)return;auto key=newId();if(!WritePrivateProfileStringW(L"Usage",L"PendingReset",wide(key).c_str(),configPath.c_str())||!WritePrivateProfileStringW(nullptr,nullptr,nullptr,configPath.c_str())){resetMessage=L"Could not save reset request ID. No reset was submitted.";return;}pendingResetKey=key;}resetBusy=true;resetMessage=L"Reset requested. Do not submit another reset.";queueChat(8,pendingResetKey);}
+void deleteConversation(const std::string&id){if(updateInstalling()||!pendingDeleteId.empty())return;auto i=std::find_if(savedChats.begin(),savedChats.end(),[&](auto&c){return c.id==id;});if(id==currentChatId){saveCurrent();i=std::find_if(savedChats.begin(),savedChats.end(),[&](auto&c){return c.id==id;});}if(i==savedChats.end())return;if(MessageBoxW(mainWindow,L"Permanently delete this conversation from Codex and remove its widget history and attachment copies?",L"Delete chat",MB_YESNO|MB_ICONWARNING|MB_DEFBUTTON2)!=IDYES)return;pendingDeleteId=id;if(chatBusy){if(id!=currentChatId){pendingDeleteId.clear();MessageBoxW(mainWindow,L"Stop the active response first.",L"History",MB_OK);return;}deleteAfterStop=true;queueChat(1);}else queueChat(6,i->thread);}
+void submitReset() {
+    resetBusy = true;
+    resetMessage = L"Reset requested...";
+    queueChat(8, pendingResetKey);
+}
+
+void confirmNewReset() {
+    if (resetBusy || resetConfirmationOpen || !pendingResetKey.empty() || updateInstalling()) return;
+    if (!resetCredits.known) {
+        resetMessage = L"Codex did not report available reset credits.";
+        return;
+    }
+    if (resetCredits.count <= 0) {
+        resetMessage = L"No reset credits available.";
+        return;
+    }
+    resetConfirmationOpen = true;
+    int choice = MessageBoxW(settingsWindow ? settingsWindow : mainWindow,
+        L"Use one available reset credit? Codex determines which quota windows are eligible.",
+        L"Use one reset credit", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+    resetConfirmationOpen = false;
+    if (choice != IDYES) {
+        resetMessage = L"Reset cancelled.";
+        return;
+    }
+    if (updateInstalling() || !resetCredits.known || !resetCredits.count ||
+        std::time(nullptr) - creditsUpdated > 150) {
+        resetMessage = L"Credit data changed or expired. Check again before resetting.";
+        return;
+    }
+    auto key = newId();
+    if (!WritePrivateProfileStringW(L"Usage", L"PendingReset", wide(key).c_str(), configPath.c_str()) ||
+        !WritePrivateProfileStringW(nullptr, nullptr, nullptr, configPath.c_str())) {
+        resetMessage = L"Could not save the reset request ID.";
+        return;
+    }
+    pendingResetKey = key;
+    submitReset();
+}
+
+void resetUsage() {
+    if (resetBusy || confirmResetAfterRead || resetConfirmationOpen || updateInstalling()) return;
+    if (!pendingResetKey.empty()) {
+        resetConfirmationOpen = true;
+        int choice = MessageBoxW(settingsWindow ? settingsWindow : mainWindow,
+            L"Retry the existing reset request using the same request ID?",
+            L"Retry reset", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+        resetConfirmationOpen = false;
+        if (choice == IDYES) submitReset();
+        return;
+    }
+    resetMessage = L"Checking available reset credits...";
+    requestQuotaRead(true);
+}
 
 void clearRenderedImages(){imageCache.clear();remoteImages.clear();selectionStart=selectionEnd=0;}
 

@@ -1,9 +1,10 @@
 #include <windows.h>
+#include "version.h"
 1 RT_MANIFEST "app.manifest"
 1 ICON "app.ico"
 1 VERSIONINFO
-FILEVERSION 1,7,1,0
-PRODUCTVERSION 1,7,1,0
+FILEVERSION UW_VERSION_RESOURCE
+PRODUCTVERSION UW_VERSION_RESOURCE
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -13,7 +14,7 @@ BEGIN
   BEGIN
    VALUE "FileDescription", "Usage Widget\0"
    VALUE "ProductName", "Usage Widget\0"
-   VALUE "FileVersion", "1.7.1\0"
+   VALUE "FileVersion", UW_VERSION "\0"
    VALUE "OriginalFilename", "UsageWidget.exe\0"
   END
  END
