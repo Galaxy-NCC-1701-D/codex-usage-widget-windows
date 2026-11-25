@@ -10,7 +10,7 @@ std::wstring intervalMessage;
 std::vector<std::pair<Gdiplus::RectF,int>> settingsActions;
 enum { ACT_TAB=500,ACT_CLOSE=510,ACT_OPACITY=511,ACT_FONT_MINUS=512,ACT_FONT_PLUS,ACT_SOUND,ACT_FIVE,ACT_WEEK,ACT_TEST_SOUND,ACT_RESET_USAGE=550,ACT_REFRESH_CREDITS,ACT_HISTORY_PREV,ACT_HISTORY_NEXT,
  ACT_REFRESH_TOGGLE,ACT_REFRESH_SAVE,ACT_CREDITS_PREV,ACT_CREDITS_NEXT,
- ACT_UPDATE_AUTO,ACT_UPDATE_CHECK,ACT_UPDATE_INSTALL,ACT_UPDATE_PAGE,ACT_UPDATE_NOTES };
+ ACT_UPDATE_AUTO,ACT_UPDATE_CHECK,ACT_UPDATE_INSTALL,ACT_UPDATE_PAGE,ACT_UPDATE_NOTES,ACT_STARTUP_CONNECTION };
 std::wstring localDate(std::int64_t timestamp, bool includeTime = false) {
     if (timestamp <= 0) return L"Unknown";
     auto value = static_cast<std::time_t>(timestamp);
@@ -63,7 +63,40 @@ void openUpdateRelease() {
     ShellExecuteW(settingsWindow, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+void toggleStartupConnection() {
+    const bool enable = !autoSelectAtStartup;
+    std::lock_guard<std::mutex> lock(connectionChoiceMutex);
+    if (!WritePrivateProfileStringW(L"Connection", L"AutoSelectAtStartup",
+                                    enable ? L"1" : L"0", configPath.c_str())) {
+        connectionPreferenceMessage = L"Could not save the startup setting.";
+        return;
+    }
+    autoSelectAtStartup = enable;
+    if (!enable && startupConnection == Startup::Checking) {
+        startupConnection = Startup::Manual;
+        wantRestart = true;
+    }
+    connectionPreferenceMessage = enable ? L"Automatic selection starts on the next launch." : L"";
+}
+
+std::wstring startupConnectionStatus() {
+    if (!connectionPreferenceMessage.empty()) return connectionPreferenceMessage;
+    switch (startupConnection.load()) {
+    case Startup::Checking:
+        return std::wstring(L"Reading quota with ") + uw::connection::label(startupCandidate.load()) + L"...";
+    case Startup::Selected:
+        return std::wstring(L"Startup selected ") + uw::connection::label(connectionMode.load()) + L".";
+    case Startup::Failed:
+        return L"No mode returned quota at startup. Select a mode above.";
+    case Startup::Manual:
+    case Startup::Off:
+        return std::wstring(L"Current mode: ") + uw::connection::label(connectionMode.load());
+    }
+    return L"";
+}
+
 void settingsAction(int id){if(id>=1000&&id<1020){auto row=(id-1000)/2;if(row<(int)historyVisibleIds.size()){auto selected=historyVisibleIds[row];if((id-1000)%2)deleteConversation(selected);else loadConversation(selected);}InvalidateRect(settingsWindow,nullptr,FALSE);return;}if(id>=ACT_TAB&&id<ACT_TAB+settingsTabCount){settingsTab=id-ACT_TAB;ShowWindow(refreshEdit,settingsTab==3?SW_SHOWNA:SW_HIDE);InvalidateRect(settingsWindow,nullptr,FALSE);return;}switch(id){case ACT_RESET_USAGE:resetUsage();break;case ACT_REFRESH_CREDITS:requestQuotaRead();break;
+case ACT_STARTUP_CONNECTION:toggleStartupConnection();break;
 case ACT_REFRESH_SAVE:saveRefreshInterval();break;
 case ACT_REFRESH_TOGGLE:toggleQuotaRefresh();break;
 case ACT_CREDITS_PREV:creditPage=std::max(0,creditPage-1);break;
@@ -87,7 +120,18 @@ void drawSettings(HWND h){PAINTSTRUCT ps;HDC screen=BeginPaint(h,&ps);RECT r;Get
  const wchar_t* tabs[]={L"Appearance",L"Notifications",L"Connection",L"Usage",L"History",L"Updates"};for(int i=0;i<settingsTabCount;i++){RectF b(20,100+i*48.f,174,40);if(settingsTab==i)visual::fill(g,b,12,highlight);label(tabs[i],38,105+i*48.f,145,14);settingsActions.push_back({b,ACT_TAB+i});}label(L"Usage Widget " UW_VERSION_W,28,516,170,12,secondary);label(automaticQuotaSeconds.load()?L"Refresh every "+std::to_wstring(refreshIntervalSeconds)+L" sec":L"Auto-refresh off",28,541,170,12,secondary);label(tabs[settingsTab],230,28,405,23);label(L"Changes stay on this computer.",230,60,430,12,secondary);
  if(settingsTab==0){visual::fill(g,RectF(222,103,464,180),18,panel);label(L"Theme",240,116,130,16);button(ID_AUTO,L"System",RectF(414,115,80,32),autoTheme);button(ID_LIGHT,L"Light",RectF(496,115,80,32),!autoTheme&&!dark);button(ID_DARK,L"Dark",RectF(578,115,80,32),!autoTheme&&dark);label(L"Background opacity",240,179,330,16);label(std::to_wstring(opacity)+L"%",610,179,60,15,secondary);RectF rail(240,238,420,5);visual::fill(g,rail,2.5f,visual::track(dark));float x=240+(opacity-25)/75.f*420;visual::fill(g,RectF(240,238,std::max(1.f,x-240),5),2.5f,Color(40,184,154));SolidBrush thumb(Color(40,184,154));g.FillEllipse(&thumb,x-7,233.f,14.f,14.f);label(L"Text and icons always stay opaque.",240,252,420,12,secondary);toggle(ID_TOP,L"Always on top",L"Keep the widget above other windows.",304,alwaysTop);toggle(ID_TASKBAR,L"Taskbar readout",L"Plain system-colored text beside the tray.",371,taskEnabled);toggle(ID_STARTUP,L"Start with Windows",L"Launch when you sign in to this Windows account.",438,startupEnabled());label(L"Taskbar font size",240,513,300,15);button(ACT_FONT_MINUS,L"-",RectF(534,513,34,32));label(std::to_wstring(taskFontSize)+L" px",578,513,50,14);button(ACT_FONT_PLUS,L"+",RectF(632,513,34,32));}
  else if(settingsTab==1){toggle(ACT_SOUND,L"Sound on reset",L"Clear triad - three bright chimes.",111,soundEnabled);toggle(ACT_FIVE,L"5-hour quota",L"Alert when this quota window is confirmed reset.",211,alertFive);toggle(ACT_WEEK,L"Weekly quota",L"Alert when the weekly window is confirmed reset.",311,alertWeek);button(ACT_TEST_SOUND,L"Test sound - Clear triad",RectF(240,440,420,36));label(L"Alerts follow a fresh server reading, not just the clock.",240,493,440,12,secondary);label(L"The widget must be running and connected.",240,519,440,12,secondary);}
- else if(settingsTab==2){struct Row{int id;const wchar_t*title;const wchar_t*desc;};Row rows[]={{ID_DETECT,L"Detect desktop Codex",L"Find a usable backend in your installed desktop app."},{ID_LOGIN,L"Sign in with ChatGPT",L"Use Codex's official local sign-in flow."},{ID_DASHBOARD,L"Open usage dashboard",L"View OpenAI's account usage page in your browser."}};for(int i=0;i<3;i++){RectF b(230,110+i*70.f,450,68);visual::fill(g,b,14,panel);label(rows[i].title,246,b.Y+5,410,15);label(rows[i].desc,246,b.Y+31,410,12,secondary);settingsActions.push_back({b,rows[i].id});}label(L"Chat connection",230,334,450,16);button(ID_HTTPS,L"HTTPS",RectF(230,376,218,36),httpsMode.load());button(ID_DEFAULT_TRANSPORT,L"Default (WebSocket)",RectF(458,376,222,36),!httpsMode.load());label(L"Applies to this widget only. Starts a new conversation.",230,425,450,12,secondary);label(L"Default mode follows Codex transport and fallback rules.",230,450,450,12,secondary);label(L"Open Codex desktop if reconnection is needed.",230,529,450,12,secondary);}
+ else if(settingsTab==2){struct Row{int id;const wchar_t*title;const wchar_t*desc;};Row rows[]={{ID_DETECT,L"Detect desktop Codex",L"Find a usable backend in your installed desktop app."},{ID_LOGIN,L"Sign in with ChatGPT",L"Use Codex's official local sign-in flow."},{ID_DASHBOARD,L"Open usage dashboard",L"View OpenAI's account usage page in your browser."}};for(int i=0;i<3;i++){RectF b(230,110+i*70.f,450,68);visual::fill(g,b,14,panel);label(rows[i].title,246,b.Y+5,410,15);label(rows[i].desc,246,b.Y+31,410,12,secondary);settingsActions.push_back({b,rows[i].id});}label(L"Connection mode",230,328,450,16);
+     auto selected = connectionMode.load();
+     button(ID_HTTPS,L"HTTPS",RectF(230,366,109,36),selected==Mode::Https);
+     button(ID_DEFAULT_TRANSPORT,L"Default (WebSocket)",RectF(345,366,176,36),selected==Mode::WebSocket);
+     button(ID_DIRECT_HTTPS,L"HTTPS Direct",RectF(527,366,153,36),selected==Mode::DirectHttps);
+     label(L"HTTPS Direct bypasses application proxies for Codex.",230,406,450,12,secondary);
+     toggle(ACT_STARTUP_CONNECTION,L"Auto-select on startup",
+            L"Use the first mode that returns a fresh quota reading.",452,autoSelectAtStartup);
+     label(startupConnectionStatus(),230,528,450,12,secondary);
+     label(L"Switch modes manually after startup.",230,553,450,12,secondary);
+ }
+
  else if (settingsTab == 3) {
      toggle(ACT_REFRESH_TOGGLE, L"Auto-refresh", L"Refresh quota and reset credits periodically.",
             92, automaticQuotaSeconds.load() != 0);

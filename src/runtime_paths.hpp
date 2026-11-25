@@ -17,7 +17,44 @@ namespace uw::runtime {
 namespace fs=std::filesystem;
 inline std::wstring fold(std::wstring s){std::transform(s.begin(),s.end(),s.begin(),[](wchar_t c){return (wchar_t)std::towlower(c);});return s;}
 inline std::wstring envKey(const std::wstring&s){auto at=s.find(L'=',s.empty()||s[0]!=L'='?0:1);return fold(s.substr(0,at));}
-inline std::vector<wchar_t> environment(const std::vector<std::wstring>&in,const std::vector<std::wstring>&dirs,const std::wstring&host=L""){std::vector<std::wstring>entries;std::wstring path;for(auto&s:in){if(!host.empty()&&envKey(s)==L"codex_code_mode_host_path")continue;if(envKey(s)==L"path"){auto at=s.find(L'=');if(at!=std::wstring::npos)path=s.substr(at+1);}else entries.push_back(s);}std::wstring prefix;std::vector<std::wstring>seen;for(auto&dir:dirs){if(dir.empty()||dir.find_first_of(L";\r\n")!=std::wstring::npos)continue;auto name=fold(dir);if(std::find(seen.begin(),seen.end(),name)!=seen.end())continue;seen.push_back(name);prefix+=dir+L";";}entries.push_back(L"PATH="+prefix+path);if(!host.empty())entries.push_back(L"CODEX_CODE_MODE_HOST_PATH="+host);std::sort(entries.begin(),entries.end(),[](auto&a,auto&b){return fold(a)<fold(b);});std::vector<wchar_t>block;for(auto&s:entries){block.insert(block.end(),s.begin(),s.end());block.push_back(0);}block.push_back(0);if(block.size()<2)block.push_back(0);return block;}
+inline std::vector<wchar_t> environment(const std::vector<std::wstring>& inherited,
+        const std::vector<std::wstring>& dirs, const std::wstring& host = L"", bool direct = false) {
+    std::vector<std::wstring> entries;
+    std::wstring path;
+    for (const auto& entry : inherited) {
+        auto key = envKey(entry);
+        if (!host.empty() && key == L"codex_code_mode_host_path") continue;
+        if (direct && (key == L"http_proxy" || key == L"https_proxy" ||
+                       key == L"all_proxy" || key == L"no_proxy")) continue;
+        if (key == L"path") {
+            auto at = entry.find(L'=');
+            if (at != std::wstring::npos) path = entry.substr(at + 1);
+        } else entries.push_back(entry);
+    }
+    std::wstring prefix;
+    std::vector<std::wstring> seen;
+    for (const auto& dir : dirs) {
+        if (dir.empty() || dir.find_first_of(L";\r\n") != std::wstring::npos) continue;
+        auto name = fold(dir);
+        if (std::find(seen.begin(), seen.end(), name) != seen.end()) continue;
+        seen.push_back(name);
+        prefix += dir + L";";
+    }
+    entries.push_back(L"PATH=" + prefix + path);
+    if (!host.empty()) entries.push_back(L"CODEX_CODE_MODE_HOST_PATH=" + host);
+    if (direct) {
+        // Empty entries also keep a dotenv file from filling in missing proxy variables.
+        entries.insert(entries.end(), {L"HTTP_PROXY=", L"HTTPS_PROXY=", L"ALL_PROXY=", L"NO_PROXY=*"});
+    }
+    std::sort(entries.begin(), entries.end(), [](const auto& a, const auto& b) { return fold(a) < fold(b); });
+    std::vector<wchar_t> block;
+    for (const auto& entry : entries) {
+        block.insert(block.end(), entry.begin(), entry.end());
+        block.push_back(0);
+    }
+    block.push_back(0);
+    return block;
+}
 inline unsigned peMachine(const fs::path&p){std::ifstream f(p,std::ios::binary);unsigned char header[64]{};if(!f.read((char*)header,64)||header[0]!='M'||header[1]!='Z')return 0;unsigned offset=(unsigned)header[60]|((unsigned)header[61]<<8)|((unsigned)header[62]<<16)|((unsigned)header[63]<<24);if(offset>1024*1024)return 0;f.seekg(offset);unsigned char pe[6]{};if(!f.read((char*)pe,6)||pe[0]!='P'||pe[1]!='E'||pe[2]||pe[3])return 0;return pe[4]|(pe[5]<<8);}
 struct Layout {fs::path backend,backendDir,host,root;int examined=0;};
 inline bool redirected(const fs::path&p){

@@ -2,6 +2,9 @@
 #include "model.hpp"
 namespace uw::transport {
 inline std::vector<std::string> overrides(bool https){if(!https)return {};return {"model_provider='usage_widget_https'","model_providers.usage_widget_https={name='OpenAI',base_url='https://chatgpt.com/backend-api/codex',wire_api='responses',requires_openai_auth=true,supports_websockets=false}"};}
+inline std::vector<std::string> directProxyOverrides(){
+    return {"features.respect_system_proxy=false","features.system_proxy_fallback=false"};
+}
 inline bool verified(const Json&root){const auto&c=root.at("result").at("config");const auto&p=c.at("model_providers").at("usage_widget_https");return !root.has("error")&&c.at("model_provider").str=="usage_widget_https"&&p.at("supports_websockets").type==Json::Boolean&&p.at("supports_websockets").number==0&&p.at("requires_openai_auth").number==1&&p.at("wire_api").str=="responses"&&p.at("base_url").str=="https://chatgpt.com/backend-api/codex";}
 inline std::string mismatch(const Json&root,bool https){if(root.has("error"))return "config/read failed (code "+std::to_string((int)root.at("error").at("code").number)+")";const auto&c=root.at("result").at("config");if(c.type!=Json::Object)return "config/read returned no configuration object";if(!https)return "";const auto&p=c.at("model_providers").at("usage_widget_https");if(c.at("model_provider").str!="usage_widget_https")return "HTTPS provider override was not applied";if(p.at("base_url").str!="https://chatgpt.com/backend-api/codex")return "HTTPS endpoint override was not applied";if(p.at("wire_api").str!="responses")return "HTTPS provider does not use Responses";if(p.at("requires_openai_auth").number!=1)return "HTTPS provider did not retain OpenAI authentication";if(p.at("supports_websockets").type!=Json::Boolean||p.at("supports_websockets").number)return "HTTPS provider did not confirm WebSockets disabled";return "";}
 class Verification {

@@ -3,7 +3,7 @@ Unicode True
 !include "x64.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
-!define WIDGET_VERSION "1.7.2"
+!define WIDGET_VERSION "1.7.3"
 Name "Usage Widget"
 OutFile "dist/UsageWidget-Setup-${WIDGET_VERSION}-x64.exe"
 VIProductVersion "${WIDGET_VERSION}.0"
